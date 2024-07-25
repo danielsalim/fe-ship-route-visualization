@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply font-montserrat;
+  @apply text-white;
+}
+
+body {
+  font-family: 'Montserrat', sans-serif;
+}
+
+.active {
+  border: 2px solid white;
+}
+
+.Toastify__toast--warning {
+  background: #7cffdc56;
+}
+
+.Toastify__progress-bar--warning {
+  background: #7CFFDB95;
+}
+
+.Toastify__toast-theme--dark {
+  color: white;
+}
+
+.Toastify__toast-theme--light {
+  color: white;
+}
+
+.Toastify__toast--warning {
+  background: #ffcc00c3;
+}
+
+.Toastify__toast--error {
+  background: #e30000;
+}
+
+.Toastify__progress-bar--warning {
+  background: #FFE500;
+}
+
+.Toastify__toast-theme--dark {
+  color: black;
+}
+
+.Toastify__toast-theme--light {
+  color: black;
+}
+
+
+.rac {
+  border-radius: 0.5rem;
+  width: 10.5rem;
+  height: 2.5rem;
+  padding: 0.25rem;
+  justify-content: center;
+  align-items: center;
+}

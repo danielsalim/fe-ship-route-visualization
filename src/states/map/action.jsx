@@ -7,6 +7,7 @@ const ActionType = {
     GET_MAP: "GET_MAP",
 
     GET_ROUTE: "GET_ROUTE",
+    CLEAR_ROUTE: 'CLEAR_ROUTE',
     GET_S57_DATA: "GET_S57_DATA",
 }
 
@@ -24,10 +25,10 @@ function getMap() {
     }
 }
 
-function getRouteDispatch(startPoint, endPoint, minimumDepth) {
+function getRouteDispatch(startPoint, endPoint, minimumDepth, maxDistanceFromLand, neighborDistance) {
     return async (dispatch) => {
         try {
-            const route = await api.getRoute(startPoint, endPoint, minimumDepth)
+            const route = await api.getRoute(startPoint, endPoint, minimumDepth, maxDistanceFromLand, neighborDistance)
             dispatch({
                 type: ActionType.GET_ROUTE,
                 payload: route
@@ -37,6 +38,14 @@ function getRouteDispatch(startPoint, endPoint, minimumDepth) {
             console.error("Error fetching data:", error)
         }
     }
+}
+
+function clearRoute() {
+    return (dispatch) => {
+        dispatch({
+            type: ActionType.CLEAR_ROUTE
+        });
+    };
 }
 
 function getS57LayersDispatch() {
@@ -59,5 +68,6 @@ export {
     ActionType,
     getMap,
     getRouteDispatch,
+    clearRoute,
     getS57LayersDispatch
 }

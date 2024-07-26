@@ -77,7 +77,7 @@ module.exports = {
         'detail-roles': '75.5rem',
         'edit-users': '75.1rem',
         'add-users': '81.25rem',
-        'sea-route': '22.5rem',
+        'sea-route': '24rem',
 
         //Stopwatch
         'stopwatch-modal': '15rem',

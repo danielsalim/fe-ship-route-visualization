@@ -1,11 +1,13 @@
 import React, { useRef, useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Fill, Icon, Stroke, Style } from 'ol/style';
+import { Circle as CircleStyle } from 'ol/style.js';
 import { Feature, Map, View } from 'ol';
 import { fromLonLat } from 'ol/proj';
 import { asArray } from 'ol/color';
 
 import MultiLineString from 'ol/geom/MultiLineString.js';
+import { BiCurrentLocation } from "react-icons/bi";
 import startIcon from '../assets/RiShip2Line.svg';
 import endIcon from '../assets/FaLocationDot.svg';
 import Select from 'ol/interaction/Select.js';
@@ -13,6 +15,7 @@ import DragBox from 'ol/interaction/DragBox';
 import LineString from 'ol/geom/LineString';
 import VectorSource from 'ol/source/Vector';
 import RoutePlanning from './RoutePlanning';
+import Geolocation from 'ol/Geolocation.js';
 import VectorLayer from 'ol/layer/Vector';
 import TileWMS from 'ol/source/TileWMS';
 import Draw from 'ol/interaction/Draw';
@@ -36,6 +39,8 @@ import { FaTimes } from "react-icons/fa";
 import 'ol/ol.css';
 import './Peta.css'
 import { forEachCorner } from "ol/extent";
+import { clearRoute } from "../states/map/action";
+import { set } from "ol/transform";
 
 
 const StopwatchAndTimer = React.lazy(() => import("fe_common_tools/StopwatchAndTimer"));
@@ -49,6 +54,11 @@ function Peta() {
     const [source] = useState(new VectorSource());
     const [wmsLayer, setWmsLayer] = useState(null);
     const [isLayerVisible, setIsLayerVisible] = useState(true);
+    const [currentView, setCurrentView] = useState(new View({
+        // center: fromLonLat([-252.38901034, -6.92513522]), // Bandung
+        center: fromLonLat([-122.44353, 47.277627]), // S57
+        zoom: 12.75
+    }));
 
     // Route Planning
     const [startPoint, setStartPoint] = useState("");
@@ -59,6 +69,7 @@ function Peta() {
     const [distancePriorityRate, setDistancePriorityRate] = useState(null);
     const [routeLayer, setRouteLayer] = useState(null);
     const [routePointType, setRoutePointType] = useState(null);
+    const [currLocCoords, setCurrLocCoords] = useState(null);
     const swapStatus = useSelector((state) => state.globalState.isSwapClicked);
     const routeLonLat = useSelector((state) => state.layers.route);
     const s57Data = useSelector((state) => state.layers.s57);
@@ -104,7 +115,7 @@ function Peta() {
 
         const routeFeature = new Feature({
             geometry: new MultiLineString([transformedCoordinates]),
-        });
+        }); 
 
         const routeStyle = new Style({
             stroke: new Stroke({
@@ -151,9 +162,66 @@ function Peta() {
         opacity: 0.7
     });
 
+
     useEffect(() => {
         channel.postMessage({ drawnObjectList, lastUpdateType, deleteTracksType });
     }, [drawnObjectList, deleteTracksType])
+
+    // User Current Location
+    const geolocation = new Geolocation({
+        trackingOptions: {
+            enableHighAccuracy: true,
+        },
+        projection: currentView.getProjection(),
+    });
+
+    const accuracyFeature = new Feature();
+    geolocation.on('change:accuracyGeometry', function () {
+        accuracyFeature.setGeometry(geolocation.getAccuracyGeometry());
+    });
+
+    const positionFeature = new Feature();
+    positionFeature.setStyle(
+        new Style({
+            image: new CircleStyle({
+                radius: 6,
+                fill: new Fill({
+                    color: '#3399CC',
+                }),
+                stroke: new Stroke({
+                    color: '#fff',
+                    width: 2,
+                }),
+            }),
+        }),
+    );
+
+    geolocation.on('change:position', function () {
+        const coordinates = geolocation.getPosition();
+        setCurrLocCoords(coordinates);
+        positionFeature.setGeometry(coordinates ? new Point(coordinates) : null);
+    });
+
+    const currLocation = new VectorLayer({
+        source: new VectorSource({
+            features: [accuracyFeature, positionFeature],
+        }),
+        properties: {
+            name: 'Current Location',
+        },
+    });
+
+    const getCurrentLocation = () => {
+        if (currLocCoords) {
+            currentView.setCenter(currLocCoords);
+            currentView.setZoom(9);
+        }
+    };
+
+    const locateS57 = () => {
+        currentView.setCenter(fromLonLat([-122.44353, 47.277627]));
+        currentView.setZoom(12.75);
+    };
 
     useEffect(() => {
         const olMap = new Map({
@@ -166,18 +234,17 @@ function Peta() {
                     source: source
                 }),
             ],
-            view: new View({
-                // center: fromLonLat([118.8186111, -1.15]), // Indonesia
-                // center: fromLonLat([61.5, -32.6333333]), // S101
-                center: fromLonLat([-122.44353, 47.277627]), // S57
-                zoom: 12.75
-            }),
+            view: currentView
         });
 
         setMap(olMap);
 
         // Add the WMS layer to the map
         olMap.addLayer(olWmsLayer);
+
+        // Add the current location layer to the map
+        olMap.addLayer(currLocation);
+        geolocation.setTracking(true);
 
         // Save map and layer references to state
         setMap(olMap);
@@ -208,28 +275,6 @@ function Peta() {
 
             source.addFeature(feature);
         };
-
-        // const bandungStyle = new Style({
-        //     fill: new Fill({
-        //         color: 'rgba(0, 0, 255, 0.5)',
-        //     }),
-        //     stroke: new Stroke({
-        //         color: 'blue',
-        //         width: 2
-        //     })
-        // });
-
-        // const bandungLayer = new VectorLayer({
-        //     source: new VectorSource({
-        //         features: new GeoJson().readFeatures(Bandung, {
-        //             dataProjection: 'EPSG:4326',
-        //             featureProjection: 'EPSG:3857'
-        //         }),
-        //     }),
-        //     style: bandungStyle,
-        // });
-
-        // olMap.addLayer(bandungLayer);
 
         channel.onmessage = (event) => {
             let geometry;
@@ -299,14 +344,14 @@ function Peta() {
             setIsSender(false);
         }
         return () => olMap.setTarget(undefined);
-    }, [source]);
+    }, [source, currentView]);
 
     useEffect(() => {
         if (routeLonLat && routeLonLat.route && startPoint && endPoint && isNewRoute === "NEW_ROUTE") {
             addRouteLayer(map, routeLonLat.route);
             dispatch(setIsNewRoute("OLD_ROUTE"))
         }
-        if (isNodeValid === "IN LAND AREA" || isNodeValid === "IN SHALLOW DEPTH AREA") {
+        if (isNodeValid === "IN LAND AREA" || isNodeValid === "IN SHALLOW DEPTH AREA" || isNodeValid === "IN TOO FAR FROM LAND AREA" || isNodeValid === "IN WRECK AREA" || isNodeValid === "IN OBSTRUCTION AREA" || isNodeValid === "IN BOYAGE AREA" || isNodeValid === "NOT IN S57 AREA") {
             undoDrawing();
             dispatch(setIsNodeValid("VALID"));
         }
@@ -444,8 +489,9 @@ function Peta() {
                     setStartPoint("");
                     layers.forEach(layer => {
                         if (layer.get('name') === 'Route Layer') {
-                            console.log("aasdasd")
                             map.removeLayer(layer);
+                            setStartPoint("");
+                            dispatch(clearRoute())
                         }
                     });
                 }
@@ -453,8 +499,9 @@ function Peta() {
                     setEndPoint("");
                     layers.forEach(layer => {
                         if (layer.get('name') === 'Route Layer') {
-                            console.log("zzzzzzzzzzzz")
                             map.removeLayer(layer);
+                            setEndPoint("");
+                            dispatch(clearRoute())
                         }
                     });
                 }
@@ -480,50 +527,6 @@ function Peta() {
         } else if (!showQEK || !trackType || !isSelectingStart || !isSelectingEnd) {
             stopDrawing();
         }
-
-        // if (swapStatus === "SWAP") {
-        //     // Find features with startIcon and endIcon then swap their styles and geometries
-        //     const features = source.getFeatures();
-        //     const startFeature = features.find((feature) => {
-        //         const style = feature.getStyle();
-        //         return style && style.getImage && style.getImage() && style.getImage().getSrc() === startIcon;
-        //     });
-        //     const endFeature = features.find((feature) => {
-        //         const style = feature.getStyle();
-        //         return style && style.getImage && style.getImage() && style.getImage().getSrc() === endIcon;
-        //     });
-
-        //     if (startFeature && endFeature) {
-        //         console.log("masuk2")
-        //         // Swap styles
-        //         const startStyle = new Style({
-        //             image: new Icon({
-        //                 src: endIcon,
-        //                 scale: 0.1,
-        //             }),
-        //         });
-        //         const endStyle = new Style({
-        //             image: new Icon({
-        //                 src: startIcon,
-        //                 scale: 0.1,
-        //             }),
-        //         });
-
-        //         startFeature.setStyle(endStyle);
-        //         endFeature.setStyle(startStyle);
-
-        //         // Transform coordinates from EPSG:3857 to EPSG:4326
-        //         const startCoordinates = transform(endFeature.getGeometry().getCoordinates(), 'EPSG:3857', 'EPSG:4326');
-        //         const endCoordinates = transform(startFeature.getGeometry().getCoordinates(), 'EPSG:3857', 'EPSG:4326');
-        //         startFeature.setProperties({ 'geometry': new Point(fromLonLat(startCoordinates)) });
-        //         endFeature.setProperties({ 'geometry': new Point(fromLonLat(endCoordinates)) });
-
-        //         // Update state and status
-        //         setStartPoint(`${endCoordinates[0].toFixed(6)}, ${endCoordinates[1].toFixed(6)}`);
-        //         setEndPoint(`${startCoordinates[0].toFixed(6)}, ${startCoordinates[1].toFixed(6)}`);
-        //         dispatch(setIsSwapClicked("NOTSWAP"));
-        //     }
-        // }
     }, [showQEK, trackType, isSelectingStart, isSelectingEnd, swapStatus]);
 
     const openQEK = () => {
@@ -603,8 +606,14 @@ function Peta() {
                     <button onClick={() => openStopwatchAndTimer("Timer")} className="bg-primary-container hover:bg-high-container text-white p-2 rounded m-1 mr-1">Timer</button>
                 </div>
                 {/*Bottom Right Section*/}
-                <div className="absolute right-0 bottom-0 mb-3 mr-3 space-y-2">
-                    {selectedFeature && select === null ?
+                <div className="absolute right-0 bottom-0 mb-4 mr-3 space-y-2">
+                    <div className="flex items-center ">
+                        <button onClick={locateS57} className="bg-primary-container hover:bg-high-container text-white p-2 rounded m-1 mr-1 text-center">Locate S57</button>
+                        <button onClick={startZoomArea} className={`  text-white p-2 rounded m-1 mr-1 ${isZooming ? "bg-red-500 hover:bg-red-700" : "bg-primary-container hover:bg-high-container"}`}>{isZooming ? "Cancel Zoom" : "Zoom Area"}</button>
+                        <button onClick={getCurrentLocation} className="bg-primary-container hover:bg-high-container text-white p-3 rounded m-1 mr-1 text-center"><BiCurrentLocation size={18} /></button>
+                        {draw ? <button onClick={stopDrawing} className="bg-red-500 hover:bg-red-700 text-white p-2 rounded m-1">Cancel </button> : null}
+                    </div>
+                    {/* {selectedFeature && select === null ?
                         (<input className="bg-white-200 text-white rounded p-1 mr-2"
                             type="color"
                             value={selectedColor}
@@ -612,13 +621,11 @@ function Peta() {
                                 setSelectedColor(e.target.value);
                                 changeFeatureColor(selectedFeature)
                             }}
-                        />) : null}
-                    <button onClick={startZoomArea} className={`  text-white p-2 rounded m-1 mr-4 ${isZooming ? "bg-red-500 hover:bg-red-700" : "bg-primary hover:bg-dark-primary"}`}>{isZooming ? "Cancel Zoom" : "Zoom Area"}</button>
+                        />) : null} */}
+
                     {/* <button onClick={startSelect} className={buttonClass}>{select ? "Confirm Select" : "Select"}</button> */}
-                    <button onClick={() => startDrawing("Circle")} className="bg-primary-container hover:bg-high-container text-white p-2 rounded m-1 mr-1">Circle</button>
-                    <button onClick={() => startDrawing("LineString")} className="bg-primary-container hover:bg-high-container text-white p-2 rounded m-1">Line</button>
-                    <button onClick={() => startDrawing("Polygon")} className="bg-primary-container hover:bg-high-container text-white p-2 rounded m-1 mr-1">Polygon</button>
-                    {draw ? <button onClick={stopDrawing} className="bg-red-500 hover:bg-red-700 text-white p-2 rounded m-1">Cancel </button> : null}
+                    {/* <button onClick={() => startDrawing("Circle")} className="bg-primary-container hover:bg-high-container text-white p-2 rounded m-1 mr-1">Circle</button>
+                    <button onClick={() => startDrawing("LineString")} className="bg-primary-container hover:bg-high-container text-white p-2 rounded m-1">Line</button> */}
                 </div>
             </div>
             <div className="flex justify-center items-center">

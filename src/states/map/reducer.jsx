@@ -17,6 +17,11 @@ function layersReducer(state = {}, action = {}) {
                 ...state,
                 s57: action.payload
             }
+        case ActionType.CLEAR_ROUTE:
+            return {
+                ...state,
+                route: null
+            };
         default:
             return state
     }

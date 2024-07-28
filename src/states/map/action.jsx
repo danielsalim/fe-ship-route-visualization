@@ -25,10 +25,10 @@ function getMap() {
     }
 }
 
-function getRouteDispatch(startPoint, endPoint, minimumDepth, maxDistanceFromLand, neighborDistance) {
+function getRouteDispatch(startPoint, endPoint, minimumDepth, maxDistanceFromLand, neighborDistance, signal) {
     return async (dispatch) => {
         try {
-            const route = await api.getRoute(startPoint, endPoint, minimumDepth, maxDistanceFromLand, neighborDistance)
+            const route = await api.getRoute(startPoint, endPoint, minimumDepth, maxDistanceFromLand, neighborDistance, signal)
             dispatch({
                 type: ActionType.GET_ROUTE,
                 payload: route
@@ -48,6 +48,7 @@ function clearRoute() {
     };
 }
 
+// Untuk mendapatkan data layer dari s57 berupa vektor yang akan digunakan untuk validasi titik dsb
 function getS57LayersDispatch() {
     return async (dispatch) => {
         try {

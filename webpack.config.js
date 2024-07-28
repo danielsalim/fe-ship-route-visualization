@@ -46,7 +46,7 @@ module.exports = (_, argv) => ({
         },
       },
       {
-        test: /\.svg$/,
+        test: /\.(png|jpe?g|gif|svg)$/,
         use: ['file-loader'],
       },
     ],

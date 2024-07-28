@@ -1,9 +1,10 @@
-import { ActionType } from "./action";
+import { ActionType, setIsGeneratingRoute } from "./action";
 
 const initialState = {
     isSwapClicked: "",
     isNodeValid: "",
-    isNewRoute: ""
+    isNewRoute: "",
+    isGeneratingRoute: ""
 };
 
 function globalReducer(state = initialState, action = {}) {
@@ -22,6 +23,11 @@ function globalReducer(state = initialState, action = {}) {
             return {
                 ...state,
                 isNewRoute: action.payload.isNewRoute
+            }
+        case ActionType.IS_GENERATING_ROUTE:
+            return {
+                ...state,
+                isGeneratingRoute: action.payload.isGeneratingRoute
             }
         default:
             return state;

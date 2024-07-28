@@ -1,9 +1,5 @@
 const api = (() => {
     const GEOSERVER_URL = process.env.GEOSERVER_URL
-    const GEOSERVER_USERNAME = process.env.GEOSERVER_USERNAME
-    const GEOSERVER_PASSWORD = process.env.GEOSERVER_PASSWORD
-    const S101_WORKSPACE_URL = process.env.S101_WORKSPACE_URL
-    const S57_WOKRSPACE_URL = process.env.S57_WORKSPACE_URL
     const API_URL = process.env.API_URL
 
 
@@ -18,9 +14,8 @@ const api = (() => {
         }
     }
 
-    async function getRoute(startPoint, endPoint, minimumDepth, maxDistanceFromLand, neighborDistance) {
+    async function getRoute(startPoint, endPoint, minimumDepth, maxDistanceFromLand, neighborDistance, signal) {
         try {
-
             const response = await fetch(`${API_URL}/route`, {
                 method: 'POST',
                 headers: {
@@ -31,15 +26,19 @@ const api = (() => {
                     end: endPoint,
                     minimumDepth: minimumDepth,
                     maxDistanceFromLand: maxDistanceFromLand,
-                    neighborDistance: neighborDistance
-                })
+                    neighborDistance: neighborDistance,
+                }),
+                signal
             });
-
             const data = await response.json();
             console.log(data)
             return data
         } catch (error) {
-            console.error("Error fetching data:", error)
+            if (error.name === 'AbortError') {
+                console.log('Request was aborted');
+            } else {
+                console.error('Error:', error);
+            }
         }
     }
 
@@ -56,7 +55,7 @@ const api = (() => {
     return {
         getS57Layers,
         getS57MapGroup,
-        getRoute
+        getRoute,
     }
 })();
 

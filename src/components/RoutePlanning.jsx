@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { setIsSwapClicked, setIsNodeValid } from '../states/global/action';
-import { getRouteDispatch } from '../states/map/action';
+import { setIsSwapClicked, setIsNodeValid, setIsGeneratingRoute } from '../states/global/action';
+import { clearRoute, getRouteDispatch } from '../states/map/action';
 import startIcon from '../assets/RiShip2Line.svg';
 import { Vector as VectorSource } from 'ol/source';
 import endIcon from '../assets/FaLocationDot.svg';
@@ -15,6 +15,7 @@ import { Point } from 'ol/geom';
 import Feature from 'ol/Feature';
 import Geolocation from 'ol/Geolocation.js';
 
+import { IoMdInformationCircleOutline } from "react-icons/io";
 import { BsFillExclamationCircleFill } from "react-icons/bs";
 import { IoSwapVerticalOutline } from "react-icons/io5";
 import { BiCurrentLocation } from "react-icons/bi";
@@ -25,17 +26,22 @@ import { RiShip2Line } from "react-icons/ri";
 import { FaTimes } from "react-icons/fa";
 import { FaUndo } from "react-icons/fa";
 import { set } from 'ol/transform';
-import './Peta.css';
+
+import { v4 as uuidv4 } from 'uuid';
+import api from '../utils/services';
 
 import 'react-toastify/dist/ReactToastify.css';
 const turf = require('@turf/turf');
 
 const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestrictedArea, isSelectingStart, isSelectingEnd, setIsSelectingStart, setIsSelectingEnd, setRoutePointType, source, safePriorityRate, setSafePriorityRate, distancePriorityRate, setDistancePriorityRate, routeLayer, setRouteLayer, startPoint, endPoint, setStartPoint, setEndPoint, map, setRoutePointFeature }) => {
     const dispatch = useDispatch();
+    const abortControllerRef = useRef(null);
+
     const [startCoords, setStartCoords] = useState([]);
     const [endCoords, setEndCoords] = useState([]);
     const [showMoreParams, setShowMoreParams] = useState(false);
     const [showMoreInfo, setShowMoreInfo] = useState(true);
+    const [hover, setHover] = useState(false);
 
     const [minimumDepth, setMinimumDepth] = useState(9.1);
     const [useMinimumDepth, setUseMinimumDepth] = useState(false);
@@ -58,8 +64,9 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
     const wrecks = useSelector((state) => state.layers.s57.wrecks);
     const obstrn = useSelector((state) => state.layers.s57.obstrn);
     const boylat = useSelector((state) => state.layers.s57.boylat);
+    const lights = useSelector((state) => state.layers.s57.lights);
     const routeLonLat = useSelector((state) => state.layers.route);
-    const isNodeValid = useSelector((state) => state.globalState.isNodeValid);
+    const isGeneratingRoute = useSelector((state) => state.globalState.isGeneratingRoute);
 
     let timeEstimate = null;
     let totalFuelConsumption = null;
@@ -150,9 +157,16 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
             const arrivalDate = new Date(arriveTime);
             const timeOffset = arrivalDate.getTimezoneOffset();
             const totalMinutes = Math.floor(parseFloat(timeEstimate.totalHours) * 60);
-            const departure = new Date(arrivalDate.getTime() + totalMinutes * 60000);
+            const departure = new Date(arrivalDate.getTime() - totalMinutes * 60000);
             const localDeparture = new Date(departure.getTime() - timeOffset * 60000);
             setDepartureTime(localDeparture.toISOString().slice(0, 16));
+        }
+    };
+
+    const handleCancelRequest = () => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            dispatch(setIsGeneratingRoute("FINISHED"))
         }
     };
 
@@ -176,13 +190,20 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
     }, [totalFuelConsumption])
 
     useEffect(() => {
+        if (routeLonLat) {
+            dispatch(setIsGeneratingRoute("FINISHED"));
+            abortControllerRef.current = null; // Clear the reference after the request is done
+        }
+    }, [routeLonLat])
+
+    useEffect(() => {
         const handleMapClick = (evt) => {
             const coordinates = transform(evt.coordinate, 'EPSG:3857', 'EPSG:4326');
             const bufferDistance = 25;
             let isInWreckArea = false;
             let isInObstrnArea = false;
             let isInBoylatArea = false;
-            let isInSea = false
+            let isInLightsArea = false
 
             lndarea.forEach((feature) => {
                 if ((isSelectingStart || isSelectingEnd) && turf.booleanPointInPolygon(turf.point(coordinates), feature.geometry)) {
@@ -201,7 +222,7 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
 
                 if ((isSelectingStart || isSelectingEnd) && isInWreckArea) {
                     dispatch(setIsNodeValid("IN WRECK AREA"))
-                    showToast("Selected point is near a wreck area. Please select another location.")
+                    showToast("Selected point is near a wreckage area. Please select another location.")
                 }
             }
 
@@ -231,6 +252,20 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
                 if ((isSelectingStart || isSelectingEnd) && isInBoylatArea) {
                     dispatch(setIsNodeValid("IN BOYAGE AREA"))
                     showToast("Selected point is near a buoy area. Please select another location.")
+                }
+            }
+
+            if (lights) {
+                lights.forEach((feature) => {
+                    const lightsArea = turf.buffer(feature.geometry, bufferDistance, { units: 'meters' });
+                    if ((isSelectingStart || isSelectingEnd) && turf.booleanIntersects(turf.point(coordinates), lightsArea)) {
+                        isInLightsArea = true;
+                    }
+                });
+
+                if ((isSelectingStart || isSelectingEnd) && isInLightsArea) {
+                    dispatch(setIsNodeValid("IN BOYAGE AREA"))
+                    showToast("Selected point is near a light area. Please select another location.")
                 }
             }
 
@@ -312,6 +347,7 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
                     id='undoDrawing'
                     className={` p-2.5 text-white cursor-pointer ml-1 mr-2 hover:text-gray-200`}
                     onClick={undoDrawing}
+                    disabled={isGeneratingRoute === 'GENERATING'}
                 >
                     <FaUndo />
                 </button>
@@ -374,20 +410,17 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
                 <div className='mt-5'>
                     <div className="flex justify-between items-center mt-4 px-2">
                         <label className="ml-1 text-white flex items-center text-sm" htmlFor="depth"
-                            data-twe-toggle="tooltip"
-                            data-twe-placement="top"
-                            data-twe-ripple-init
-                            data-twe-ripple-color="light"
-                            title="Adjust the minimum depth for ship to traverse. this is calculated relative to mean sea level. &#10;So, negative depth mean its above mean sea level, could be rocky or reef area."
+                            title="Adjust the minimum depth for ship to traverse. this is calculated relative to mean sea level. &#10;So, negative depth means its above mean sea level, could be rocky or reef area."
+                            onClick={() => setUseMinimumDepth(!useMinimumDepth)}
                         >
                             <input
                                 type="checkbox"
                                 checked={useMinimumDepth}
-                                onChange={() => setUseMinimumDepth(!useMinimumDepth)}
                                 className="mr-2"
                                 disabled={(startPoint || endPoint)}
                             />
                             Minimum Depth
+                            <IoMdInformationCircleOutline className='ml-2' title='Minimum depth can only be changed if both starting and goal node has not been selected.' />
                         </label>
                         <div className="flex items-center justify-between">
                             <input
@@ -406,20 +439,17 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
                     </div>
                     <div className="flex justify-between items-center mt-4 px-2">
                         <label className="ml-1 text-white flex items-center text-sm" htmlFor="distanceFromLand"
-                            data-twe-toggle="tooltip"
-                            data-twe-placement="top"
-                            data-twe-ripple-init
-                            data-twe-ripple-color="light"
-                            title="Adjust the maximum distance from nearest land. default is none"
+                            title="Adjust the maximum distance from nearest land. default is none."
+                            onClick={() => setMaxUseDistanceFromLand(!useMaxDistanceFromLand)}
                         >
                             <input
                                 type="checkbox"
                                 checked={useMaxDistanceFromLand}
-                                onChange={() => setMaxUseDistanceFromLand(!useMaxDistanceFromLand)}
                                 className="mr-2"
                                 disabled={startPoint || endPoint}
                             />
                             Distance From Land
+                            <IoMdInformationCircleOutline className='ml-2' title='Distance from land can only be changed if both starting and goal node has not been selected.' />
                         </label>
                         <div className="flex items-center justify-between">
                             <input
@@ -438,16 +468,12 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
                     </div>
                     <div className="flex justify-between items-center mt-4 px-2">
                         <label className="ml-1 text-white flex items-center text-sm" htmlFor="neighborDistance"
-                            data-twe-toggle="tooltip"
-                            data-twe-placement="top"
-                            data-twe-ripple-init
-                            data-twe-ripple-color="light"
-                            title="Adjust the distance between neighboring points. Safety distance between potential nodes. default is 100m"
+                            title="Adjust the distance between neighbor nodes (safety distance between potential nodes). Neighbor nodes is generated in 8 even circular direction. default is 150m."
+                            onClick={() => setUseNeighborDistance(!useNeighborDistance)}
                         >
                             <input
                                 type="checkbox"
                                 checked={useNeighborDistance}
-                                onChange={() => setUseNeighborDistance(!useNeighborDistance)}
                                 className="mr-2"
                             />
                             Safe Distance
@@ -543,20 +569,50 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
             )}
             <div className="mt-4">
                 <button
-                    className={`w-full p-2 place-content-stretch rounded-b-2xl mt-2 text-white shadow-md ${startPoint === "" || endPoint === ""
-                        ? "bg-gray-500 cursor-not-allowed"
-                        : "bg-primary hover:bg-dark-primary cursor-pointer"
+                    className={`w-full p-2 place-content-stretch rounded-b-2xl mt-2 text-white shadow-md ${startPoint === '' || endPoint === ''
+                        ? 'bg-gray-500 cursor-not-allowed'
+                        : isGeneratingRoute === 'GENERATING'
+                            ? hover
+                                ? 'bg-red-700 cursor-pointer'
+                                : 'bg-primary cursor-not-allowed'
+                            : 'bg-primary hover:bg-dark-primary cursor-pointer'
                         }`}
+                    onMouseEnter={() => setHover(true)}
+                    onMouseLeave={() => setHover(false)}
                     onClick={() => {
-                        let depth = useMinimumDepth ? minimumDepth : -3.3;
-                        let distance = useMaxDistanceFromLand ? maxDistanceFromLand : 22224;
-                        let neighbor = useNeighborDistance ? neighborDistance : 100;
+                        if (routeLonLat && timeEstimate) {
+                            const layers = map.getLayers().getArray();
+                            layers.forEach(layer => {
+                                if (layer.get('name') === 'Route Layer') {
+                                    map.removeLayer(layer);
+                                    dispatch(clearRoute())
+                                }
+                            });
+                        }
+                        else if (isGeneratingRoute === "GENERATING") {
+                            handleCancelRequest()
+                        }
+                        else {
+                            let depth = useMinimumDepth ? minimumDepth : -3.3;
+                            let distance = useMaxDistanceFromLand ? maxDistanceFromLand : 22224;
+                            let neighbor = useNeighborDistance ? neighborDistance : 100;
 
-                        dispatch(getRouteDispatch(startCoords, endCoords, depth, distance, neighbor));
+                            abortControllerRef.current = new AbortController();
+                            const { signal } = abortControllerRef.current;
+
+                            dispatch(setIsGeneratingRoute("GENERATING"))
+                            dispatch(getRouteDispatch(startCoords, endCoords, depth, distance, neighbor, signal));
+                        }
                     }}
                     disabled={startPoint === "" || endPoint === ""}
                 >
-                    Generate Route
+                    {routeLonLat && timeEstimate
+                        ? 'New Route'
+                        : isGeneratingRoute === 'GENERATING'
+                            ? hover
+                                ? 'Cancel'
+                                : 'Generating Route...'
+                            : 'Generate Route'}
                 </button>
             </div>
         </div>

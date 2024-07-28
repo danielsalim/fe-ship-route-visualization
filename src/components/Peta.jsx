@@ -29,19 +29,25 @@ import QEK from './qek/QEK';
 import { setIsSwapClicked, setIsNodeValid, setIsNewRoute } from '../states/global/action';
 import { BsFillExclamationCircleFill } from "react-icons/bs";
 import { bbox as bboxStrategy } from 'ol/loadingstrategy.js';
-import GeoJson from 'ol/format/GeoJSON';
+import { clearRoute } from "../states/map/action";
+import { MdArrowDropDown } from "react-icons/md";
 import 'react-toastify/dist/ReactToastify.css';
 import Bandung from '../Assets/Bandung.json';
-import BaseObject from 'ol/Object.js';
-import { toast } from 'react-toastify';
-import { transform } from 'ol/proj';
-import { FaTimes } from "react-icons/fa";
-import 'ol/ol.css';
-import './Peta.css'
 import { forEachCorner } from "ol/extent";
-import { clearRoute } from "../states/map/action";
+import { FaSquare } from "react-icons/fa";
+import { FaTimes } from "react-icons/fa";
+import GeoJson from 'ol/format/GeoJSON';
+import { toast } from 'react-toastify';
+import BaseObject from 'ol/Object.js';
+import { transform } from 'ol/proj';
 import { set } from "ol/transform";
+import './Peta.css'
+import 'ol/ol.css';
 
+import BoylatIcon from "../assets/s57_png/BOYLAT.png"
+import WrecksIcon from "../assets/s57_png/WRECKS.png"
+import LightsIcon from "../assets/s57_png/LIGHTS.png"
+import ObstrnIcon from "../assets/s57_png/OBSTRN.png"
 
 const StopwatchAndTimer = React.lazy(() => import("fe_common_tools/StopwatchAndTimer"));
 
@@ -70,6 +76,7 @@ function Peta() {
     const [routeLayer, setRouteLayer] = useState(null);
     const [routePointType, setRoutePointType] = useState(null);
     const [currLocCoords, setCurrLocCoords] = useState(null);
+    const [showLegend, setShowLegend] = useState(true)
     const swapStatus = useSelector((state) => state.globalState.isSwapClicked);
     const routeLonLat = useSelector((state) => state.layers.route);
     const s57Data = useSelector((state) => state.layers.s57);
@@ -97,8 +104,8 @@ function Peta() {
 
     //Add Route to Map
     const addRouteLayer = (map, coordinates) => {
-        if (routeLonLat.message === "No route found") {
-            toast.error("No route found. Please try again", {
+        if (routeLonLat.message) {
+            toast.error(routeLonLat.message, {
                 position: "bottom-left",
                 autoClose: 3000,
                 hideProgressBar: false,
@@ -115,7 +122,7 @@ function Peta() {
 
         const routeFeature = new Feature({
             geometry: new MultiLineString([transformedCoordinates]),
-        }); 
+        });
 
         const routeStyle = new Style({
             stroke: new Stroke({
@@ -147,7 +154,7 @@ function Peta() {
         map.addLayer(vectorLayer);
     };
 
-    //Get S57 Layer
+    //Get S57 Layer Group
     const olWmsLayer = new TileLayer({
         source: new TileWMS({
             url: `${GEOSERVER_URL}/wms`,
@@ -210,6 +217,10 @@ function Peta() {
             name: 'Current Location',
         },
     });
+
+    const toggleLegend = () => {
+        setShowLegend(!showLegend);
+    }
 
     const getCurrentLocation = () => {
         if (currLocCoords) {
@@ -600,16 +611,66 @@ function Peta() {
                 />
                 {/*Top Right Section*/}
                 <div className="absolute right-0 top-0 mt-2 mr-3 space-y-2">
-                    <button onClick={() => toggleLayerVisibility()} className="bg-primary-container hover:bg-high-container text-white p-2 rounded m-1 mr-1"> {isLayerVisible ? 'Hide S-57 Layer' : 'Show S-57 Layer'} </button>
-                    <button onClick={() => openQEK()} className="bg-primary-container hover:bg-high-container text-white p-2 rounded m-1 mr-1">QEK</button>
-                    <button onClick={() => openStopwatchAndTimer("Stopwatch")} className="bg-primary-container hover:bg-high-container text-white p-2 rounded m-1 mr-1">Stopwatch</button>
-                    <button onClick={() => openStopwatchAndTimer("Timer")} className="bg-primary-container hover:bg-high-container text-white p-2 rounded m-1 mr-1">Timer</button>
+                    <div className="flex justify-end">
+                        <button className="cursor-pointer bg-primary-container hover:bg-high-container text-white p-2 rounded m-1 mr-1" onClick={toggleLegend}>
+                            {/* <MdArrowDropDown size={12} width={5} height={5} className="text-white" /> */}
+                            <p className="text-white text">{showLegend ? "Hide Legend" : "Show Legend"}</p>
+                        </button>
+                    </div>
+                    {showLegend && (
+                        <div className="w-52 bg-primary-container text-sm flex flex-col border-2 border-blue-700 rounded-md space-y-4 p-4 mt-2 mr-1">
+                            <div className="flex" title="A lateral buoy is used to indicate the port or starboard hand side of the route to be followed.">
+                                <img src={BoylatIcon} className="w-4 h-4 mr-5" />
+                                <span className="text-white text-left">Lateral Buoy</span>
+                            </div>
+                            <div className="flex" title="The ruined remains of a stranded or sunken vessel which has been rendered useless.">
+                                <img src={WrecksIcon} className="w-4 h-4 mr-5" />
+                                <span className="text-white text-left">Wreckage</span>
+                            </div>
+                            <div className="flex" title="A luminous or lighted aid to navigation.">
+                                <img src={LightsIcon} className="w-4 h-4 mr-5" />
+                                <span className="text-white text-left">Light Tower</span>
+                            </div>
+                            <div className="flex" title="In marine navigation, anything that hinders or prevents movement, particularly anything that endangers or prevents passage of a vessel.&#10; The term is usually used to refer to an isolated danger to navigation, such as a sunken rock or pinnacle.">
+                                <img src={ObstrnIcon} className="w-4 h-4 mr-5" />
+                                <span className="text-white text-left">Obstruction</span>
+                            </div>
+                            <div className="flex ">
+                                <FaSquare style={{ color: "#CDE8BC" }} className="w-4 h-4 mr-5" />
+                                <span className="text-white text-left">-3.3 &lt; Depth &lt;= 0</span> {/* Depth -3.3 - 0 */}
+                            </div>
+                            <div className="flex ">
+                                <FaSquare style={{ color: "#73B6EF" }} className="w-4 h-4 mr-5" />
+                                <span className="text-white text-left">0 &lt; Depth &lt;= 3</span>  {/* Depth 0 - 3 */}
+                            </div>
+                            <div className="flex ">
+                                <FaSquare style={{ color: "#98C5F2" }} className="w-4 h-4 mr-5" />
+                                <span className="text-white text-left">3 &lt; Depth &lt;= 6</span> {/* Depth 3 - 6 */}
+                            </div>
+                            <div className="flex ">
+                                <FaSquare style={{ color: "#BAD5E1" }} className="w-4 h-4 mr-5" />
+                                <span className="text-white text-left">6 &lt; Depth &lt;= 9</span> {/* Depth 6 - 9 */}
+                            </div>
+                            <div className="flex ">
+                                <FaSquare style={{ color: "#D4EAEE" }} className="w-4 h-4 mr-5" />
+                                <span className="text-white text-left">&gt;= 9.1 Depth</span> {/* Depth >= 9.1 */}
+                            </div>
+                            <div className="flex" title="The solid portion of the Earth's surface, as opposed to sea, water.">
+                                <FaSquare style={{ color: "#ccc57b" }} className="w-4 h-4 mr-5" />
+                                <span className="text-white text-left">Land Area</span> {/* Depth >= 9.1 */}
+                            </div>
+                        </div>
+                    )}
                 </div>
+                {/* <button onClick={() => openQEK()} className="bg-primary-container hover:bg-high-container text-white p-2 rounded m-1 mr-1">QEK</button> */}
                 {/*Bottom Right Section*/}
                 <div className="absolute right-0 bottom-0 mb-4 mr-3 space-y-2">
                     <div className="flex items-center ">
-                        <button onClick={locateS57} className="bg-primary-container hover:bg-high-container text-white p-2 rounded m-1 mr-1 text-center">Locate S57</button>
+                        <button onClick={() => openStopwatchAndTimer("Stopwatch")} className="bg-primary-container hover:bg-high-container text-white p-2 rounded m-1 mr-1">Stopwatch</button>
+                        <button onClick={() => openStopwatchAndTimer("Timer")} className="bg-primary-container hover:bg-high-container text-white p-2 rounded m-1 mr-1">Timer</button>
+                        <button onClick={() => toggleLayerVisibility()} className="bg-primary-container hover:bg-high-container text-white p-2 rounded m-1 mr-1"> {isLayerVisible ? 'Hide S-57 Layer' : 'Show S-57 Layer'} </button>
                         <button onClick={startZoomArea} className={`  text-white p-2 rounded m-1 mr-1 ${isZooming ? "bg-red-500 hover:bg-red-700" : "bg-primary-container hover:bg-high-container"}`}>{isZooming ? "Cancel Zoom" : "Zoom Area"}</button>
+                        <button onClick={locateS57} className="bg-primary-container hover:bg-high-container text-white p-2 rounded m-1 mr-1 text-center">Locate Route Area</button>
                         <button onClick={getCurrentLocation} className="bg-primary-container hover:bg-high-container text-white p-3 rounded m-1 mr-1 text-center"><BiCurrentLocation size={18} /></button>
                         {draw ? <button onClick={stopDrawing} className="bg-red-500 hover:bg-red-700 text-white p-2 rounded m-1">Cancel </button> : null}
                     </div>

@@ -14,7 +14,7 @@ const api = (() => {
         }
     }
 
-    async function getRoute(startPoint, endPoint, minimumDepth, maxDistanceFromLand, neighborDistance, signal) {
+    async function getRoute(startPoint, endPoint, minimumDepth, minDistanceFromLand, maxDistanceFromLand, neighborDistance, signal) {
         try {
             const response = await fetch(`${API_URL}/route`, {
                 method: 'POST',
@@ -25,6 +25,7 @@ const api = (() => {
                     start: startPoint,
                     end: endPoint,
                     minimumDepth: minimumDepth,
+                    minDistanceFromLand: minDistanceFromLand,
                     maxDistanceFromLand: maxDistanceFromLand,
                     neighborDistance: neighborDistance,
                 }),

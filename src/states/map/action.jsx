@@ -25,10 +25,10 @@ function getMap() {
     }
 }
 
-function getRouteDispatch(startPoint, endPoint, minimumDepth, maxDistanceFromLand, neighborDistance, signal) {
+function getRouteDispatch(startPoint, endPoint, minimumDepth, minDistanceFromLand, maxDistanceFromLand, neighborDistance, signal) {
     return async (dispatch) => {
         try {
-            const route = await api.getRoute(startPoint, endPoint, minimumDepth, maxDistanceFromLand, neighborDistance, signal)
+            const route = await api.getRoute(startPoint, endPoint, minimumDepth, minDistanceFromLand, maxDistanceFromLand, neighborDistance, signal)
             dispatch({
                 type: ActionType.GET_ROUTE,
                 payload: route

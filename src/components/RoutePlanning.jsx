@@ -1,39 +1,24 @@
+import { setIsNodeValid, setIsGeneratingRoute } from '../states/global/action';
+import { clearRoute, getRouteDispatch } from '../states/map/action';
 import React, { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { setIsSwapClicked, setIsNodeValid, setIsGeneratingRoute } from '../states/global/action';
-import { clearRoute, getRouteDispatch } from '../states/map/action';
 import startIcon from '../assets/RiShip2Line.svg';
-import { Vector as VectorSource } from 'ol/source';
 import endIcon from '../assets/FaLocationDot.svg';
-import { Vector as VectorLayer } from 'ol/layer';
-import { Style, Icon } from 'ol/style';
-import Draw from 'ol/interaction/Draw';
 import { toast } from 'react-toastify';
-import { fromLonLat } from 'ol/proj';
 import { transform } from 'ol/proj';
-import { Point } from 'ol/geom';
-import Feature from 'ol/Feature';
-import Geolocation from 'ol/Geolocation.js';
 
 import { IoMdInformationCircleOutline } from "react-icons/io";
 import { BsFillExclamationCircleFill } from "react-icons/bs";
-import { IoSwapVerticalOutline } from "react-icons/io5";
-import { BiCurrentLocation } from "react-icons/bi";
 import { MdArrowDropDown } from "react-icons/md";
 import { FaLocationDot } from "react-icons/fa6";
-import { MdMyLocation } from "react-icons/md";
 import { RiShip2Line } from "react-icons/ri";
 import { FaTimes } from "react-icons/fa";
 import { FaUndo } from "react-icons/fa";
-import { set } from 'ol/transform';
-
-import { v4 as uuidv4 } from 'uuid';
-import api from '../utils/services';
 
 import 'react-toastify/dist/ReactToastify.css';
 const turf = require('@turf/turf');
 
-const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestrictedArea, isSelectingStart, isSelectingEnd, setIsSelectingStart, setIsSelectingEnd, setRoutePointType, source, safePriorityRate, setSafePriorityRate, distancePriorityRate, setDistancePriorityRate, routeLayer, setRouteLayer, startPoint, endPoint, setStartPoint, setEndPoint, map, setRoutePointFeature }) => {
+const RoutePlanning = ({ undoDrawing, isSelectingStart, isSelectingEnd, setIsSelectingStart, setIsSelectingEnd, startPoint, endPoint, setStartPoint, setEndPoint, map, setRoutePointType }) => {
     const dispatch = useDispatch();
     const abortControllerRef = useRef(null);
 
@@ -46,14 +31,17 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
     const [minimumDepth, setMinimumDepth] = useState(9.1);
     const [useMinimumDepth, setUseMinimumDepth] = useState(false);
 
-    const [maxDistanceFromLand, setMaxDistanceFromLand] = useState(250);
+    const [maxDistanceFromLand, setMaxDistanceFromLand] = useState(1205);
     const [useMaxDistanceFromLand, setMaxUseDistanceFromLand] = useState(false);
 
-    const [neighborDistance, setNeighborDistance] = useState(100);
+    const [minDistanceFromLand, setMinDistanceFromLand] = useState(5);
+    const [useMinDistanceFromLand, setMinUseDistanceFromLand] = useState(false);
+
+    const [neighborDistance, setNeighborDistance] = useState(150);
     const [useNeighborDistance, setUseNeighborDistance] = useState(false);
 
     const [speed, setSpeed] = useState(20);
-    const [fuelConsumption, setFuelConsumption] = useState(2500);
+    const [fuelConsumption, setFuelConsumption] = useState(5);
 
     const [departureTime, setDepartureTime] = useState('');
     const [arrivalTime, setArrivalTime] = useState('');
@@ -83,8 +71,28 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
         setMinimumDepth(e.target.value);
     };
 
-    const handleMaxxDistanceFromLandChange = (e) => {
-        setMaxDistanceFromLand(e.target.value);
+    const handleMaxDistanceFromLandChange = (e) => {
+        const newMaxDistance = parseInt(e.target.value, 10);
+
+        // Ensure newMaxDistance is not less than minDistanceFromLand + 300
+        if (newMaxDistance < minDistanceFromLand + 300) {
+            // Set maxDistanceFromLand to minDistanceFromLand + 300
+            setMaxDistanceFromLand(minDistanceFromLand + 300);
+        } else {
+            setMaxDistanceFromLand(newMaxDistance);
+        }
+    };
+
+    const handleMinDistanceFromLandChange = (e) => {
+        const newMinDistance = parseInt(e.target.value, 10);
+
+        // Ensure newMinDistance is not greater than maxDistanceFromLand - 300
+        if (newMinDistance > maxDistanceFromLand - 300) {
+            // Set minDistanceFromLand to maxDistanceFromLand - 300
+            setMinDistanceFromLand(maxDistanceFromLand - 300);
+        } else {
+            setMinDistanceFromLand(newMinDistance);
+        }
     };
 
     const handleNeighborDistanceChange = (e) => {
@@ -121,8 +129,8 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
         const minutes = Math.floor((totalHours * 60) % 60);
 
         return {
-            totalHours: totalHours.toFixed(2), // Total hours for other calculations
-            timeArray: [days, hours, minutes] // Array format [days, hours, minutes]
+            totalHours: totalHours.toFixed(2),
+            timeArray: [days, hours, minutes]
         };
     };
 
@@ -170,6 +178,19 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
         }
     };
 
+    const handleGenerateRoute = () => {
+        let depth = useMinimumDepth ? minimumDepth : -3.3;
+        let minDistance = useMinDistanceFromLand ? minDistanceFromLand : 5;
+        let maxDistance = useMaxDistanceFromLand ? maxDistanceFromLand : 22224;
+        let neighbor = useNeighborDistance ? neighborDistance : 150;
+
+        abortControllerRef.current = new AbortController();
+        const { signal } = abortControllerRef.current;
+
+        dispatch(setIsGeneratingRoute("GENERATING"))
+        dispatch(getRouteDispatch(startCoords, endCoords, depth, minDistance, maxDistance, neighbor, signal));
+    }
+
     const showToast = (text) => {
         toast.error(text, {
             position: "bottom-left",
@@ -193,6 +214,19 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
         if (routeLonLat) {
             dispatch(setIsGeneratingRoute("FINISHED"));
             abortControllerRef.current = null; // Clear the reference after the request is done
+            if (fuelConsumption > 10 && minimumDepth !== 9.1) {
+                toast.warning("Ship's fuel consumption rate is considered too high for the selected minimum depth. Please traverse carefully.", {
+                    position: "bottom-left",
+                    autoClose: 3000,
+                    hideProgressBar: false,
+                    closeOnClick: true,
+                    pauseOnHover: true,
+                    draggable: true,
+                    progress: undefined,
+                    icon: <BsFillExclamationCircleFill className="w-6 h-6" />,
+                    closeButton: <FaTimes style={{ color: "black" }} className="w-6 h-6" />,
+                });
+            }
         }
     }, [routeLonLat])
 
@@ -203,7 +237,9 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
             let isInWreckArea = false;
             let isInObstrnArea = false;
             let isInBoylatArea = false;
-            let isInLightsArea = false
+            let isInLightsArea = false;
+            let isTooFarFromLand = true;
+            let isTooCloseToLand = false;
 
             lndarea.forEach((feature) => {
                 if ((isSelectingStart || isSelectingEnd) && turf.booleanPointInPolygon(turf.point(coordinates), feature.geometry)) {
@@ -269,6 +305,36 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
                 }
             }
 
+            if (useMinDistanceFromLand && minDistanceFromLand) {
+                const circle = turf.buffer(turf.point(coordinates), minDistanceFromLand, { units: 'meters' });
+
+                lndarea.forEach((feature) => {
+                    if ((isSelectingStart || isSelectingEnd) && turf.booleanIntersects(circle, feature.geometry)) {
+                        isTooCloseToLand = true;
+                    }
+                });
+
+                if ((isSelectingStart || isSelectingEnd) && isTooCloseToLand) {
+                    dispatch(setIsNodeValid("IN TOO NEAR FROM LAND AREA"));
+                    showToast("Selected point is too near from land. Please select another location.");
+                }
+            }
+
+            if (useMaxDistanceFromLand && maxDistanceFromLand) {
+                const circle = turf.buffer(turf.point(coordinates), maxDistanceFromLand, { units: 'meters' });
+
+                lndarea.forEach((feature) => {
+                    if ((isSelectingStart || isSelectingEnd) && turf.booleanIntersects(circle, feature.geometry)) {
+                        isTooFarFromLand = false;
+                    }
+                });
+
+                if ((isSelectingStart || isSelectingEnd) && isTooFarFromLand) {
+                    dispatch(setIsNodeValid("IN TOO FAR FROM LAND AREA"));
+                    showToast("Selected point is too far from land. Please select another location.");
+                }
+            }
+
             if (useMinimumDepth && minimumDepth) {
                 depare.forEach((feature) => {
                     if ((isSelectingStart || isSelectingEnd) && turf.booleanPointInPolygon(turf.point(coordinates), feature.geometry) && minimumDepth > feature.properties.drval1) {
@@ -284,46 +350,18 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
                 })
             }
 
-            // if (depare) {
-            //     depare.forEach((feature) => {
-            //         if ((isSelectingStart || isSelectingEnd) && turf.booleanPointInPolygon(turf.point(coordinates), feature.geometry)) {
-            //             isInSea = true;
-            //         }
-            //     })
-            //     if ((isSelectingStart || isSelectingEnd) && !isInSea) {
-            //         dispatch(setIsNodeValid("NOT IN S57 AREA"))
-            //         showToast("Selected point is outside of S57 Area. Please select another location.");
-            //     }
-            // }
-
-            if (useMaxDistanceFromLand && maxDistanceFromLand) {
-                let intersects = false;
-                const circle = turf.buffer(turf.point(coordinates), maxDistanceFromLand, { units: 'meters' });
-
-                lndarea.forEach((feature) => {
-                    if ((isSelectingStart || isSelectingEnd) && turf.booleanIntersects(circle, feature.geometry)) {
-                        intersects = true;
-                    }
-                });
-
-                if ((isSelectingStart || isSelectingEnd) && !intersects) {
-                    dispatch(setIsNodeValid("IN TOO FAR FROM LAND AREA"));
-                    showToast("Selected point is too far from land. Please select another location.");
-                }
-            }
-
             if (isSelectingStart) {
                 setStartPoint(`${coordinates[0].toFixed(8)}, ${coordinates[1].toFixed(8)}`);
                 setStartCoords(coordinates);
                 setIsSelectingStart(false);
-                if (isInBoylatArea || isInObstrnArea || isInWreckArea) {
+                if (isInBoylatArea || isInObstrnArea || isInWreckArea || isInLightsArea || useMinDistanceFromLand && isTooCloseToLand || useMaxDistanceFromLand && isTooFarFromLand) {
                     setStartPoint("")
                 }
             } else if (isSelectingEnd) {
                 setEndPoint(`${coordinates[0].toFixed(8)}, ${coordinates[1].toFixed(8)}`);
                 setEndCoords(coordinates);
                 setIsSelectingEnd(false);
-                if (isInBoylatArea || isInObstrnArea || isInWreckArea) {
+                if (isInBoylatArea || isInObstrnArea || isInWreckArea || isInLightsArea || useMinDistanceFromLand && isTooCloseToLand || useMaxDistanceFromLand && isTooFarFromLand) {
                     setEndPoint("")
                 }
             }
@@ -340,10 +378,11 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
     }, [map, isSelectingStart, isSelectingEnd, minimumDepth, maxDistanceFromLand, useMaxDistanceFromLand, useMinimumDepth]);
 
     return (
-        <div className="bg-primary-container rounded-2xl absolute left-0 top-0 mt-4 ml-12 w-sea-route">
+        <div className="bg-primary-container rounded-2xl absolute left-0 top-0 mt-4 ml-6 w-sea-route">
             <div className="bg-primary-container text-white p-3 rounded-2xl flex justify-between items-center">
                 <p className="mr-2 text-lg font-bold">Sea Route</p>
                 <button
+                    title='Undo'
                     id='undoDrawing'
                     className={` p-2.5 text-white cursor-pointer ml-1 mr-2 hover:text-gray-200`}
                     onClick={undoDrawing}
@@ -354,6 +393,7 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
             </div>
             <div className="flex items-center mt-2 px-2">
                 <button
+                    title='Click to Select Start Point'
                     id='startPoint'
                     className={` p-2.5 bg-primary rounded-md text-white cursor-pointer ml-1 mr-2 shadow-md ${startPoint === "" ? 'hover:bg-dark-primary' : 'text-gray-400'} ${isSelectingStart ? 'bg-dark-primary' : ''}`}
                     onClick={() => {
@@ -379,6 +419,7 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
             </div>
             <div className="flex items-center mt-2 px-2">
                 <button
+                    title='Click to Select End Point'
                     id='endPoint'
                     className={` p-2.5 bg-primary rounded-md text-white cursor-pointer ml-1 mr-2 shadow-md ${endPoint === "" ? 'hover:bg-dark-primary' : 'text-gray-400'} ${isSelectingEnd ? 'bg-dark-primary' : ''}`}
                     onClick={() => {
@@ -409,18 +450,16 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
             {showMoreParams && (
                 <div className='mt-5'>
                     <div className="flex justify-between items-center mt-4 px-2">
-                        <label className="ml-1 text-white flex items-center text-sm" htmlFor="depth"
-                            title="Adjust the minimum depth for ship to traverse. this is calculated relative to mean sea level. &#10;So, negative depth means its above mean sea level, could be rocky or reef area."
-                            onClick={() => setUseMinimumDepth(!useMinimumDepth)}
-                        >
+                        <label className="ml-1 text-white flex items-center text-sm" htmlFor="depth"                        >
                             <input
+                                onClick={() => setUseMinimumDepth(!useMinimumDepth)}
                                 type="checkbox"
                                 checked={useMinimumDepth}
                                 className="mr-2"
                                 disabled={(startPoint || endPoint)}
                             />
                             Minimum Depth
-                            <IoMdInformationCircleOutline className='ml-2' title='Minimum depth can only be changed if both starting and goal node has not been selected.' />
+                            <IoMdInformationCircleOutline className='ml-2' title='Adjust the minimum depth for ship to traverse. this is calculated relative to mean sea level, default is none.&#10;So, negative depth means its above mean sea level, could be rocky or reef area. &#10;Minimum depth can only be changed if both starting and goal node has not been selected.' />
                         </label>
                         <div className="flex items-center justify-between">
                             <input
@@ -434,41 +473,74 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
                                 onChange={handleDepthChange}
                                 disabled={startPoint || endPoint}
                             />
-                            <span className="text-green-400 font-bold text-right w-14 text-sm mr-3"> {minimumDepth} m</span>
+                            <span className={`text-sm text-right font-bold mr-3 w-14 ${startPoint || endPoint ? 'text-gray-500' : 'text-green-400'}`}>
+                                {minimumDepth} m
+                            </span>
                         </div>
                     </div>
                     <div className="flex justify-between items-center mt-4 px-2">
-                        <label className="ml-1 text-white flex items-center text-sm" htmlFor="distanceFromLand"
-                            title="Adjust the maximum distance from nearest land. default is none."
-                            onClick={() => setMaxUseDistanceFromLand(!useMaxDistanceFromLand)}
+                        <label className="ml-1 text-white flex items-center text-sm" htmlFor="minDistanceFromLand"
                         >
                             <input
+                                onClick={() => setMinUseDistanceFromLand(!useMinDistanceFromLand)}
+                                type="checkbox"
+                                checked={useMinDistanceFromLand}
+                                className="mr-2"
+                                disabled={startPoint || endPoint}
+                            />
+                            Min Distance from Land
+                            <IoMdInformationCircleOutline className='ml-2' title='Adjust the minimum distance from nearest land, default is 5m.  &#10;Min distance from land can only be changed if both starting and goal node has not been selected.' />
+                        </label>
+                        <div className="flex items-center justify-between">
+                            <input
+                                id="minDistanceFromLand"
+                                className="w-20 items-center mr-5"
+                                type="range"
+                                min="5"
+                                max="1205"
+                                step="50"
+                                value={minDistanceFromLand}
+                                onChange={handleMinDistanceFromLandChange}
+                                disabled={startPoint || endPoint}
+                            />
+                            <span className={`text-sm text-right font-bold mr-3 w-14 ${startPoint || endPoint ? 'text-gray-500' : 'text-green-400'}`}>
+                                {minDistanceFromLand} m
+                            </span>
+                        </div>
+                    </div>
+                    <div className="flex justify-between items-center mt-4 px-2">
+                        <label className="ml-1 text-white flex items-center text-sm" htmlFor="maxDistanceFromLand"
+                        >
+                            <input
+                                onClick={() => setMaxUseDistanceFromLand(!useMaxDistanceFromLand)}
                                 type="checkbox"
                                 checked={useMaxDistanceFromLand}
                                 className="mr-2"
                                 disabled={startPoint || endPoint}
                             />
-                            Distance From Land
-                            <IoMdInformationCircleOutline className='ml-2' title='Distance from land can only be changed if both starting and goal node has not been selected.' />
+                            Max Distance from Land
+                            <IoMdInformationCircleOutline className='ml-2' title='Adjust the maximum distance from nearest land, default is 22.4km (EEZ).  &#10;Max distance from land can only be changed if both starting and goal node has not been selected.' />
                         </label>
                         <div className="flex items-center justify-between">
                             <input
-                                id="distanceFromLand"
+                                id="maxDistanceFromLand"
                                 className="w-20 items-center mr-5"
                                 type="range"
-                                min="0"
-                                max="1200"
+                                min="5"
+                                max="1205"
                                 step="50"
                                 value={maxDistanceFromLand}
-                                onChange={handleMaxxDistanceFromLandChange}
+                                onChange={handleMaxDistanceFromLandChange}
                                 disabled={startPoint || endPoint}
                             />
-                            <span className="text-green-400 text-sm text-right font-bold mr-3 w-14">{maxDistanceFromLand} m</span>
+                            <span className={`text-sm text-right font-bold mr-3 w-14 ${startPoint || endPoint ? 'text-gray-500' : 'text-green-400'}`}>
+                                {maxDistanceFromLand} m
+                            </span>
                         </div>
                     </div>
                     <div className="flex justify-between items-center mt-4 px-2">
                         <label className="ml-1 text-white flex items-center text-sm" htmlFor="neighborDistance"
-                            title="Adjust the distance between neighbor nodes (safety distance between potential nodes). Neighbor nodes is generated in 8 even circular direction. default is 150m."
+                            title=""
                             onClick={() => setUseNeighborDistance(!useNeighborDistance)}
                         >
                             <input
@@ -476,7 +548,8 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
                                 checked={useNeighborDistance}
                                 className="mr-2"
                             />
-                            Safe Distance
+                            Safety Radius
+                            <IoMdInformationCircleOutline className='ml-2' title='Adjust the distance between neighbor nodes (safety distance between potential nodes). Neighbor nodes is generated in 8 even circular direction. default is 150m.' />
                         </label>
                         <div className="flex items-center justify-between">
                             <input
@@ -593,15 +666,7 @@ const RoutePlanning = ({ undoDrawing, stopDrawing, isRestrictedArea, setIsRestri
                             handleCancelRequest()
                         }
                         else {
-                            let depth = useMinimumDepth ? minimumDepth : -3.3;
-                            let distance = useMaxDistanceFromLand ? maxDistanceFromLand : 22224;
-                            let neighbor = useNeighborDistance ? neighborDistance : 100;
-
-                            abortControllerRef.current = new AbortController();
-                            const { signal } = abortControllerRef.current;
-
-                            dispatch(setIsGeneratingRoute("GENERATING"))
-                            dispatch(getRouteDispatch(startCoords, endCoords, depth, distance, neighbor, signal));
+                            handleGenerateRoute()
                         }
                     }}
                     disabled={startPoint === "" || endPoint === ""}
